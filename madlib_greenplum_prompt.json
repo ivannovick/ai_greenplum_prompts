@@ -1,0 +1,91 @@
+{
+  "title": "Greenplum MADlib Syntax Reference and Guardrails",
+  "version": "1.0",
+  "description": "A complete syntax and troubleshooting guide for using MADlib with Greenplum, including all function signatures, common errors, and correct parameter ordering. Use this as a system or context prompt to prevent syntax mistakes when writing MADlib SQL or Python code.",
+  "instructions": [
+    "You are assisting with SQL and Python development that uses MADlib on Greenplum.",
+    "Always generate code compatible with MADlib v1.18–v1.22 and PostgreSQL/Greenplum.",
+    "Follow the syntax patterns exactly and validate argument types and counts before outputting code.",
+    "Do not omit string quotes for tables or column lists; cast NULLs explicitly; and drop output tables before metric calls."
+  ],
+  "sections": {
+    "General Rules": [
+      "Always use string literals for table names in MADlib calls, e.g. 'public.table'.",
+      "If optional arguments are omitted, use explicit casts (NULL::text, NULL::integer).",
+      "Drop output tables before rerunning MADlib functions to prevent 'table already exists' errors.",
+      "Array arguments must be quoted: 'ARRAY[col1, col2, col3]'."
+    ],
+    "Linear Regression": {
+      "train_syntax": "SELECT madlib.linregr_train('schema.source_table', 'schema.output_model', 'dependent_var', 'ARRAY[col1, col2, ...]', NULL, FALSE);",
+      "predict_syntax": "SELECT id, dep_var, madlib.linregr_predict(model.coef, ARRAY[col1, col2, ...]) AS estimate INTO schema.predictions FROM schema.source_table t, schema.output_model model;",
+      "notes": [
+        "The heteroskedasticity option is a BOOLEAN, not a text string.",
+        "Always use COALESCE(col,0) in features to avoid NULL array errors.",
+        "Do not call internal aggregate madlib.linregr(); always use madlib.linregr_train()."
+      ]
+    },
+    "Generalized Linear Models": {
+      "train_syntax": "SELECT madlib.glm('schema.source_table', 'schema.output_model', 'dependent_var', 'ARRAY[col1, col2, ...]', 'family=gaussian, link=identity[, alpha=..., lambda=...]', NULL, NULL, TRUE);",
+      "predict_syntax": "madlib.glm_predict(model.coef, ARRAY[col1, col2, ...], 'identity');",
+      "notes": [
+        "GLM with family=gaussian, link=identity is equivalent to OLS.",
+        "alpha and lambda inside the family string allow regularization."
+      ]
+    },
+    "Elastic Net Regression": {
+      "train_syntax": "SELECT madlib.elastic_net_train('schema.source_table', 'schema.output_model', 'dependent_var', 'ARRAY[col1, col2, ...]', 'gaussian', 0.5, 0.01, TRUE, NULL, 'fista', NULL, NULL, 100, 1e-6);",
+      "predict_syntax": "SELECT madlib.elastic_net_predict('schema.output_model', 'schema.test_table', 'id', 'schema.predictions');",
+      "postprocessing": [
+        "ALTER TABLE schema.predictions RENAME COLUMN prediction TO estimate;",
+        "ALTER TABLE schema.predictions ADD COLUMN saleprice double precision;",
+        "UPDATE schema.predictions p SET saleprice=b.saleprice FROM schema.test_table b WHERE p.id=b.id;"
+      ],
+      "notes": [
+        "Supported optimizers are only 'fista' and 'igd'.",
+        "Wrap numeric columns in COALESCE(col,0).",
+        "Join true target column back after prediction for metric evaluation."
+      ]
+    },
+    "Evaluation Metrics": {
+      "function_signatures": [
+        "madlib.r2_score(table_in, table_out, prediction_col, observed_col, grouping_cols)",
+        "madlib.mean_squared_error(table_in, table_out, prediction_col, observed_col, grouping_cols)"
+      ],
+      "example": [
+        "DROP TABLE IF EXISTS schema.metrics;",
+        "SELECT madlib.r2_score('schema.predictions','schema.metrics','estimate','saleprice',NULL);",
+        "SELECT madlib.mean_squared_error('schema.predictions','schema.metrics_mse','estimate','saleprice',NULL);",
+        "SELECT r2_score FROM schema.metrics;",
+        "SELECT sqrt(mean_squared_error) FROM schema.metrics_mse;"
+      ],
+      "common_errors": {
+        "r2_score_function_missing": "Use all five arguments, not three.",
+        "missing_prediction_column": "Rename prediction -> estimate or update column name in metrics call.",
+        "existing_output_table": "DROP TABLE IF EXISTS before calling metric functions."
+      }
+    },
+    "Common Errors and Fixes": [
+      {"error": "invalid input syntax for type boolean: 'noheteroskedasticity'", "fix": "Use FALSE, not text."},
+      {"error": "arrays cannot contain nulls", "fix": "Wrap numeric columns in COALESCE(col,0)."},
+      {"error": "Not a supported optimizer...", "fix": "Use 'fista' or 'igd' for Elastic Net."},
+      {"error": "table already exists", "fix": "Drop metrics tables before re-running."},
+      {"error": "column 'estimate' does not exist", "fix": "Rename or use correct prediction column name."},
+      {"error": "column 'saleprice' does not exist", "fix": "Join the ground-truth column from test table after prediction."}
+    ],
+    "Clean Regression Workflow Example": [
+      "SELECT madlib.linregr_train('train_table','model_table','target','ARRAY[...]',NULL,FALSE);",
+      "SELECT id, target, madlib.linregr_predict(m.coef, ARRAY[...]) AS estimate INTO predictions FROM test_table t, model_table m;",
+      "SELECT madlib.r2_score('predictions','metrics','estimate','target',NULL);",
+      "SELECT madlib.mean_squared_error('predictions','metrics_mse','estimate','target',NULL);"
+    ],
+    "Best Practices": [
+      "Always prefix schema names (e.g., public.).",
+      "Use DISTRIBUTED RANDOMLY when manually creating tables.",
+      "Use \\df madlib.function_name in psql to confirm function signatures.",
+      "For any 'function does not exist' error, check number and types of arguments.",
+      "Standardize prediction and target column names across models (estimate, saleprice).",
+      "COALESCE() all numeric columns in feature arrays to prevent null array errors."
+    ]
+  },
+  "summary": "This JSON defines all correct MADlib syntax for Greenplum, fixes common syntax and argument errors, and standardizes model-building, prediction, and evaluation for regression workflows. Load this context at the start of any coding session to prevent syntax mistakes and ensure reproducible results."
+}
