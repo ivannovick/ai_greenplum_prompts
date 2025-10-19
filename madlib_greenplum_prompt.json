@@ -1,20 +1,33 @@
 {
   "title": "Greenplum MADlib Syntax Reference and Guardrails",
-  "version": "1.0",
-  "description": "A complete syntax and troubleshooting guide for using MADlib with Greenplum, including all function signatures, common errors, and correct parameter ordering. Use this as a system or context prompt to prevent syntax mistakes when writing MADlib SQL or Python code.",
+  "version": "1.1",
+  "description": "A complete syntax and troubleshooting guide for using MADlib with Greenplum, including all function signatures, common errors, and correct parameter ordering. Updated to prevent double precision ROUND() errors by requiring numeric casts.",
   "instructions": [
     "You are assisting with SQL and Python development that uses MADlib on Greenplum.",
     "Always generate code compatible with MADlib v1.18–v1.22 and PostgreSQL/Greenplum.",
     "Follow the syntax patterns exactly and validate argument types and counts before outputting code.",
-    "Do not omit string quotes for tables or column lists; cast NULLs explicitly; and drop output tables before metric calls."
+    "Do not omit string quotes for tables or column lists; cast NULLs explicitly; and drop output tables before metric calls.",
+    "When using ROUND(), always cast floating-point or double precision columns to numeric before rounding: ROUND(col::numeric, precision)."
   ],
   "sections": {
     "General Rules": [
       "Always use string literals for table names in MADlib calls, e.g. 'public.table'.",
       "If optional arguments are omitted, use explicit casts (NULL::text, NULL::integer).",
       "Drop output tables before rerunning MADlib functions to prevent 'table already exists' errors.",
-      "Array arguments must be quoted: 'ARRAY[col1, col2, col3]'."
+      "Array arguments must be quoted: 'ARRAY[col1, col2, col3]'.",
+      "Always cast floating-point columns to numeric before rounding to avoid 'function round(double precision, integer) does not exist' errors."
     ],
+    "Rounding and Numeric Casting": {
+      "rounding_rule": "Use ROUND(col::numeric, precision) instead of ROUND(col, precision).",
+      "example": [
+        "✅ Correct: ROUND(SalePrice::numeric, 0) AS SalePrice",
+        "❌ Incorrect: ROUND(SalePrice, 0)"
+      ],
+      "notes": [
+        "Greenplum and PostgreSQL only define ROUND(numeric, integer), not ROUND(double precision, integer).",
+        "Always cast to numeric explicitly before rounding, especially in export or reporting queries."
+      ]
+    },
     "Linear Regression": {
       "train_syntax": "SELECT madlib.linregr_train('schema.source_table', 'schema.output_model', 'dependent_var', 'ARRAY[col1, col2, ...]', NULL, FALSE);",
       "predict_syntax": "SELECT id, dep_var, madlib.linregr_predict(model.coef, ARRAY[col1, col2, ...]) AS estimate INTO schema.predictions FROM schema.source_table t, schema.output_model model;",
@@ -70,7 +83,8 @@
       {"error": "Not a supported optimizer...", "fix": "Use 'fista' or 'igd' for Elastic Net."},
       {"error": "table already exists", "fix": "Drop metrics tables before re-running."},
       {"error": "column 'estimate' does not exist", "fix": "Rename or use correct prediction column name."},
-      {"error": "column 'saleprice' does not exist", "fix": "Join the ground-truth column from test table after prediction."}
+      {"error": "column 'saleprice' does not exist", "fix": "Join the ground-truth column from test table after prediction."},
+      {"error": "function round(double precision, integer) does not exist", "fix": "Always cast double precision to numeric before rounding: ROUND(col::numeric, precision)."}
     ],
     "Clean Regression Workflow Example": [
       "SELECT madlib.linregr_train('train_table','model_table','target','ARRAY[...]',NULL,FALSE);",
@@ -84,8 +98,9 @@
       "Use \\df madlib.function_name in psql to confirm function signatures.",
       "For any 'function does not exist' error, check number and types of arguments.",
       "Standardize prediction and target column names across models (estimate, saleprice).",
-      "COALESCE() all numeric columns in feature arrays to prevent null array errors."
+      "COALESCE() all numeric columns in feature arrays to prevent null array errors.",
+      "When rounding, always cast to numeric first: ROUND(col::numeric, precision)."
     ]
   },
-  "summary": "This JSON defines all correct MADlib syntax for Greenplum, fixes common syntax and argument errors, and standardizes model-building, prediction, and evaluation for regression workflows. Load this context at the start of any coding session to prevent syntax mistakes and ensure reproducible results."
+  "summary": "This JSON defines all correct MADlib syntax for Greenplum, adds guidance to prevent ROUND(double precision, integer) errors, and standardizes best practices for model building, prediction, and evaluation."
 }
