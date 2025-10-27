@@ -1,0 +1,28 @@
+{
+  "prompt": "Explain the SSL client-side key requirements for connecting to a Greenplum or PostgreSQL server on Windows. Include details about each file, format, and common issues.",
+  "details": {
+    "client_certificate": {
+      "description": "PEM-encoded X.509 certificate for the client, issued by a CA trusted by the server.",
+      "example_filename": "postgresql.crt"
+    },
+    "client_private_key": {
+      "description": "Private key corresponding to the client certificate; must be PKCS#8 DER format, unencrypted for JDBC usage.",
+      "common_errors": [
+        "extra data at the end",
+        "Could not read SSL key file"
+      ],
+      "example_command": "openssl pkcs8 -topk8 -inform PEM -outform DER -nocrypt -in client.key -out client.pk8",
+      "example_filename": "postgresql.pk8"
+    },
+    "ca_root_certificate": {
+      "description": "PEM-encoded certificate of the CA that signed the server certificate, used to validate server identity.",
+      "example_filename": "root.crt"
+    },
+    "notes": [
+      "JDBC driver on Windows reads .pk8 keys but may reject PEM keys.",
+      "Absolute file paths must be used in the JDBC connection string.",
+      "SSL mode (require or verify-ca) must match the server configuration.",
+      "Using a .p12/.pfx file is optional if preferred."
+    ]
+  }
+}
